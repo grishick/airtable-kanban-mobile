@@ -34,6 +34,13 @@ interface ListResponse {
   offset?: string;
 }
 
+function timeoutSignal(ms: number): AbortSignal {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), ms);
+  controller.signal.addEventListener('abort', () => clearTimeout(id));
+  return controller.signal;
+}
+
 export class AirtableClient {
   private readonly baseUrl = 'https://api.airtable.com/v0';
 
@@ -58,7 +65,7 @@ export class AirtableClient {
     try {
       const resp = await fetch(`${this.tableUrl}?maxRecords=1`, {
         headers: this.headers,
-        signal: AbortSignal.timeout(5000),
+        signal: timeoutSignal(5000),
       });
       return resp.ok;
     } catch {
@@ -76,7 +83,7 @@ export class AirtableClient {
 
       const resp = await fetch(url.toString(), {
         headers: this.headers,
-        signal: AbortSignal.timeout(30000),
+        signal: timeoutSignal(30000),
       });
 
       if (!resp.ok) {
@@ -96,7 +103,7 @@ export class AirtableClient {
       method: 'POST',
       headers: this.headers,
       body: JSON.stringify({ fields }),
-      signal: AbortSignal.timeout(15000),
+      signal: timeoutSignal(15000),
     });
 
     if (!resp.ok) {
@@ -110,7 +117,7 @@ export class AirtableClient {
       method: 'PATCH',
       headers: this.headers,
       body: JSON.stringify({ fields }),
-      signal: AbortSignal.timeout(15000),
+      signal: timeoutSignal(15000),
     });
 
     if (!resp.ok) {
@@ -123,7 +130,7 @@ export class AirtableClient {
     const resp = await fetch(`${this.tableUrl}/${recordId}`, {
       method: 'DELETE',
       headers: this.headers,
-      signal: AbortSignal.timeout(15000),
+      signal: timeoutSignal(15000),
     });
 
     if (!resp.ok) {
@@ -163,7 +170,7 @@ export class AirtableClient {
           { name: 'Tags', type: 'multipleSelects', options: { choices: [] } },
         ],
       }),
-      signal: AbortSignal.timeout(15000),
+      signal: timeoutSignal(15000),
     });
     if (!resp.ok) {
       if (resp.status === 403) {
@@ -181,7 +188,7 @@ export class AirtableClient {
     try {
       const resp = await fetch(metaUrl, {
         headers: this.headers,
-        signal: AbortSignal.timeout(10000),
+        signal: timeoutSignal(10000),
       });
       if (!resp.ok) return [];
       const data = (await resp.json()) as MetaTablesResponse;

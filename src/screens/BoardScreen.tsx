@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
-import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import KanbanColumn, { COLUMN_WIDTH } from '../components/KanbanColumn';
+import KanbanColumn from '../components/KanbanColumn';
 import SyncStatusBar from '../components/SyncStatusBar';
 import { useApp } from '../context/AppContext';
 import { STATUSES } from '../types';
@@ -11,9 +11,16 @@ import type { RootStackParamList } from '../navigation/AppNavigator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
+const COL_GAP = 12;
+
 export default function BoardScreen() {
   const { tasks, syncStatus, triggerSync, createAirtableTable } = useApp();
   const navigation = useNavigation<Nav>();
+  const { width, height } = useWindowDimensions();
+
+  const isLandscape = width > height;
+  // Portrait: 1 column (82% wide). Landscape: ~44% so 2 columns fit comfortably.
+  const columnWidth = isLandscape ? Math.floor(width * 0.44) : Math.floor(width * 0.82);
 
   const tasksByStatus = useMemo(() => {
     const map: Record<string, Task[]> = {};
@@ -56,7 +63,7 @@ export default function BoardScreen() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.board}
         decelerationRate="fast"
-        snapToInterval={COLUMN_WIDTH + 12}
+        snapToInterval={columnWidth + COL_GAP}
         snapToAlignment="start"
       >
         {STATUSES.map((status) => (
@@ -64,6 +71,7 @@ export default function BoardScreen() {
             key={status}
             status={status}
             tasks={tasksByStatus[status] ?? []}
+            columnWidth={columnWidth}
             onTaskPress={handleTaskPress}
             onAddTask={() => handleAddTask(status)}
           />
@@ -85,6 +93,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   endPad: {
-    width: 12,
+    width: COL_GAP,
   },
 });

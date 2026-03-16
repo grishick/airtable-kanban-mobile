@@ -35,7 +35,10 @@ export default function SyncStatusBar({ status, onSync, onCreateTable }: Props) 
 
   const dotColor = STATE_COLOR[status.state] ?? '#6B778C';
 
+  const showError = (status.state === 'error' || status.state === 'offline') && status.error;
+
   return (
+    <View style={styles.container}>
     <View style={styles.bar}>
       <View style={[styles.dot, { backgroundColor: dotColor }]} />
       <Text style={styles.label} numberOfLines={1}>{label}</Text>
@@ -57,6 +60,10 @@ export default function SyncStatusBar({ status, onSync, onCreateTable }: Props) 
         </Pressable>
       </View>
     </View>
+    {showError && (
+      <Text style={styles.errorDetail} numberOfLines={2}>{status.error}</Text>
+    )}
+    </View>
   );
 }
 
@@ -70,15 +77,23 @@ function formatRelative(iso: string): string {
 }
 
 const styles = StyleSheet.create({
+  container: {
+    backgroundColor: '#fff',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#DFE1E6',
+  },
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
     paddingVertical: 6,
-    backgroundColor: '#fff',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#DFE1E6',
     gap: 6,
+  },
+  errorDetail: {
+    fontSize: 11,
+    color: '#FF5630',
+    paddingHorizontal: 14,
+    paddingBottom: 5,
   },
   dot: {
     width: 7,

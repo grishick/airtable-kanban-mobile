@@ -3,7 +3,7 @@
     "name": "airtable-kanban-mobile",
     "slug": "airtable-kanban-mobile",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
@@ -12,7 +12,8 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.airtable-kanban-mobile"
     },
     "android": {
       "adaptiveIcon": {

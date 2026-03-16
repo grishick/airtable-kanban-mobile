@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useState } from 'react';
+import React, { useLayoutEffect, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import RichTextEditor from '../components/RichTextEditor';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/AppNavigator';
 import { useApp } from '../context/AppContext';
@@ -119,15 +120,7 @@ export default function TaskDetailScreen({ route, navigation }: Props) {
         {/* Description */}
         <View style={styles.group}>
           <Text style={styles.label}>DESCRIPTION</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            value={desc}
-            onChangeText={setDesc}
-            placeholder="Optional details… (Markdown supported)"
-            placeholderTextColor="#A5ADBA"
-            multiline
-            textAlignVertical="top"
-          />
+          <RichTextEditor value={desc} onChange={setDesc} />
         </View>
 
         {/* Status */}
@@ -244,10 +237,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#172B4D',
     backgroundColor: '#FAFBFC',
-  },
-  textArea: {
-    minHeight: 120,
-    paddingTop: 10,
   },
   chipRow: {
     flexDirection: 'row',

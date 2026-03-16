@@ -1,20 +1,27 @@
-import React from 'react';
-import { Dimensions, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from 'react';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import TaskCard from './TaskCard';
 import type { Task } from '../types';
 
-const COLUMN_WIDTH = Dimensions.get('window').width * 0.82;
+const PAGE_SIZE = 10;
 
 interface Props {
   status: string;
   tasks: Task[];
+  columnWidth: number;
   onTaskPress: (task: Task) => void;
   onAddTask: () => void;
 }
 
-export default function KanbanColumn({ status, tasks, onTaskPress, onAddTask }: Props) {
+export default function KanbanColumn({ status, tasks, columnWidth, onTaskPress, onAddTask }: Props) {
+  const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
+
+  const visibleTasks = tasks.slice(0, displayCount);
+  const hiddenCount = tasks.length - displayCount;
+  const loadMoreCount = Math.min(PAGE_SIZE, hiddenCount);
+
   return (
-    <View style={styles.column}>
+    <View style={[styles.column, { width: columnWidth }]}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{status}</Text>
         <View style={styles.countBadge}>
@@ -23,7 +30,7 @@ export default function KanbanColumn({ status, tasks, onTaskPress, onAddTask }: 
       </View>
 
       <FlatList
-        data={tasks}
+        data={visibleTasks}
         keyExtractor={(t) => t.id}
         renderItem={({ item }) => (
           <TaskCard task={item} onPress={() => onTaskPress(item)} />
@@ -31,9 +38,21 @@ export default function KanbanColumn({ status, tasks, onTaskPress, onAddTask }: 
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
         ListFooterComponent={
-          <Pressable style={styles.addBtn} onPress={onAddTask}>
-            <Text style={styles.addBtnText}>+ Add a task</Text>
-          </Pressable>
+          <>
+            {hiddenCount > 0 && (
+              <Pressable
+                style={styles.loadMoreBtn}
+                onPress={() => setDisplayCount((c) => c + PAGE_SIZE)}
+              >
+                <Text style={styles.loadMoreText}>
+                  Load {loadMoreCount} more ({hiddenCount} remaining)
+                </Text>
+              </Pressable>
+            )}
+            <Pressable style={styles.addBtn} onPress={onAddTask}>
+              <Text style={styles.addBtnText}>+ Add a task</Text>
+            </Pressable>
+          </>
         }
       />
     </View>
@@ -42,7 +61,6 @@ export default function KanbanColumn({ status, tasks, onTaskPress, onAddTask }: 
 
 const styles = StyleSheet.create({
   column: {
-    width: COLUMN_WIDTH,
     marginLeft: 12,
     backgroundColor: '#F4F5F7',
     borderRadius: 10,
@@ -79,6 +97,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingBottom: 4,
   },
+  loadMoreBtn: {
+    padding: 10,
+    borderRadius: 6,
+    alignItems: 'center',
+    backgroundColor: '#E4E6EB',
+    marginBottom: 4,
+  },
+  loadMoreText: {
+    fontSize: 12,
+    color: '#5E6C84',
+    fontWeight: '600',
+  },
   addBtn: {
     padding: 10,
     borderRadius: 6,
@@ -89,5 +119,3 @@ const styles = StyleSheet.create({
     color: '#5E6C84',
   },
 });
-
-export { COLUMN_WIDTH };

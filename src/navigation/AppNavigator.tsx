@@ -2,7 +2,7 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import BoardScreen from '../screens/BoardScreen';
 import TaskDetailScreen from '../screens/TaskDetailScreen';
 import SettingsScreen from '../screens/SettingsScreen';
@@ -37,7 +37,7 @@ function TabNavigator() {
         options={{
           title: 'Airtable Kanban',
           tabBarLabel: 'Board',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 18, color }}>⬛</Text>,
+          tabBarIcon: ({ color, size }) => <Ionicons name="grid-outline" size={size} color={color} />,
         }}
       />
       <Tab.Screen
@@ -45,7 +45,7 @@ function TabNavigator() {
         component={SettingsScreen}
         options={{
           title: 'Settings',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 18, color }}>⚙️</Text>,
+          tabBarIcon: ({ color, size }) => <Ionicons name="settings-outline" size={size} color={color} />,
         }}
       />
     </Tab.Navigator>
