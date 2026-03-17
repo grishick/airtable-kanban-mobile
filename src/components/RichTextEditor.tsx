@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
 import WebView from 'react-native-webview';
 import type { WebViewMessageEvent } from 'react-native-webview';
@@ -138,6 +138,7 @@ export default function RichTextEditor({ value, onChange }: Props) {
   const webViewRef = useRef<InstanceType<typeof WebView>>(null);
   const [height, setHeight] = useState(MIN_HEIGHT);
   const lastEmittedRef = useRef(value);
+  const initialHtml = useMemo(() => buildEditorHTML(value), []);
 
   const onMessage = (e: WebViewMessageEvent) => {
     try {
@@ -171,7 +172,7 @@ export default function RichTextEditor({ value, onChange }: Props) {
     <View style={[styles.container, { height }]}>
       <WebView
         ref={webViewRef}
-        source={{ html: buildEditorHTML(value) }}
+        source={{ html: initialHtml }}
         onMessage={onMessage}
         scrollEnabled={false}
         cacheEnabled
