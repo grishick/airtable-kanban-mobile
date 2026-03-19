@@ -570,7 +570,7 @@ export default function SettingsScreen() {
             style={styles.input}
             value={oauthLambdaUrl}
             onChangeText={setOauthLambdaUrl}
-            placeholder="https://xxxxxxxx.lambda-url.us-east-1.on.aws"
+            placeholder="https://airtable-kanban.widgeterian.com"
             placeholderTextColor="#A5ADBA"
             autoCapitalize="none"
             autoCorrect={false}
@@ -585,7 +585,7 @@ export default function SettingsScreen() {
         </Pressable>
 
         <View style={styles.footer}>
-          <Text style={styles.versionText}>Airtable Kanban v1.0.1</Text>
+          <Text style={styles.versionText}>Airtable Kanban v1.0.2</Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
