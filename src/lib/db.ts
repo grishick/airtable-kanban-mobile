@@ -28,8 +28,22 @@ export async function initDB(): Promise<void> {
 
 export async function initDBForAccountId(accountId?: string): Promise<void> {
   const file = accountId ? `kanban-${accountId}.db` : 'kanban.db';
+  const prev = db;
   currentDbFile = file;
-  db = await SQLite.openDatabaseAsync(file);
+
+  // Ensure we actually switch the underlying DB file on account switch.
+  // `expo-sqlite` supports `closeAsync()` on the database instance in modern SDKs,
+  // but we keep this defensive in case the method isn't available.
+  if (prev && typeof (prev as any).closeAsync === 'function') {
+    try {
+      await (prev as any).closeAsync();
+    } catch {
+      // Best-effort; we'll still attempt to open the next DB.
+    }
+  }
+
+  // Some runtimes may cache connections by name; request a new connection if supported.
+  db = await (SQLite as any).openDatabaseAsync(file, { useNewConnection: true });
   await db.execAsync('PRAGMA journal_mode = WAL;');
   await db.execAsync('PRAGMA foreign_keys = ON;');
   await migrate();

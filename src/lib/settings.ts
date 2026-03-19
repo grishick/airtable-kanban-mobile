@@ -6,6 +6,8 @@ const TOKEN_KEY = 'airtable_access_token';
 const BASE_ID_KEY = 'airtable_base_id';
 const TABLE_NAME_KEY = 'airtable_table_name';
 const OAUTH_LAMBDA_URL_KEY = 'oauth_lambda_url';
+const DEFAULT_OAUTH_LAMBDA_URL =
+  'https://pbxi4xf6qvqzdalkhk5qlcmnzm0pzwau.lambda-url.us-east-1.on.aws/';
 
 export async function loadSettings(): Promise<Settings> {
   const [token, baseId, tableName, oauthLambdaUrl] = await Promise.all([
@@ -15,7 +17,7 @@ export async function loadSettings(): Promise<Settings> {
     AsyncStorage.getItem(OAUTH_LAMBDA_URL_KEY),
   ]);
   return {
-    oauth_lambda_url: oauthLambdaUrl ?? undefined,
+    oauth_lambda_url: (oauthLambdaUrl && oauthLambdaUrl.trim()) ? oauthLambdaUrl : DEFAULT_OAUTH_LAMBDA_URL,
     airtable_access_token: token ?? undefined,
     airtable_base_id: baseId ?? undefined,
     airtable_table_name: tableName ?? undefined,
