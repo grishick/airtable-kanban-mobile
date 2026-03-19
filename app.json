@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "airtable-kanban-mobile",
+    "name": "Airtable Kanban",
     "slug": "airtable-kanban-mobile",
     "version": "1.0.4",
     "orientation": "default",
@@ -13,7 +13,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.airtable-kanban-mobile",
+      "bundleIdentifier": "com.gsolovyev.airtablekanban",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
