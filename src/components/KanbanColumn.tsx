@@ -1,7 +1,17 @@
-import React, { useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import TaskCard from './TaskCard';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
+import DraggableTaskCard from './DraggableTaskCard';
 import type { Task } from '../types';
+import { useDrag } from '../context/DragContext';
 
 const PAGE_SIZE = 10;
 
@@ -13,15 +23,102 @@ interface Props {
   onAddTask: () => void;
 }
 
-export default function KanbanColumn({ status, tasks, columnWidth, onTaskPress, onAddTask }: Props) {
+export default function KanbanColumn({
+  status,
+  tasks,
+  columnWidth,
+  onTaskPress,
+  onAddTask,
+}: Props) {
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
+  const {
+    draggedTaskId,
+    targetStatus,
+    dropIndex,
+    registerColumn,
+    registerCardLayout,
+    clearCardLayouts,
+    setColumnListScreenY,
+    setColumnScrollOffset,
+  } = useDrag();
+
+  const columnRef = useRef<View>(null);
 
   const visibleTasks = tasks.slice(0, displayCount);
   const hiddenCount = tasks.length - displayCount;
   const loadMoreCount = Math.min(PAGE_SIZE, hiddenCount);
 
+  const isDropTarget = draggedTaskId != null && targetStatus === status;
+
+  const handleColumnLayout = useCallback(
+    (e: LayoutChangeEvent) => {
+      const { x, width } = e.nativeEvent.layout;
+      registerColumn(status, { x, width });
+    },
+    [status, registerColumn],
+  );
+
+  const handleListLayout = useCallback(
+    (e: LayoutChangeEvent) => {
+      e.target.measureInWindow((_x: number, y: number) => {
+        setColumnListScreenY(status, y);
+      });
+    },
+    [status, setColumnListScreenY],
+  );
+
+  const handleListScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      setColumnScrollOffset(status, e.nativeEvent.contentOffset.y);
+    },
+    [status, setColumnScrollOffset],
+  );
+
+  const handleCardLayout = useCallback(
+    (index: number, e: LayoutChangeEvent) => {
+      const { y, height } = e.nativeEvent.layout;
+      registerCardLayout(status, index, { y, height });
+    },
+    [status, registerCardLayout],
+  );
+
+  useEffect(() => {
+    clearCardLayouts(status);
+  }, [tasks.length, status, clearCardLayouts]);
+
+  const renderItem = useCallback(
+    ({ item, index }: { item: Task; index: number }) => {
+      const isDragged = item.id === draggedTaskId;
+      const showIndicator = isDropTarget && dropIndex === index;
+
+      return (
+        <>
+          {showIndicator && <View style={styles.dropIndicator} />}
+          <DraggableTaskCard
+            task={item}
+            onPress={() => onTaskPress(item)}
+            isDragged={isDragged}
+            onCardLayout={(e) => handleCardLayout(index, e)}
+          />
+        </>
+      );
+    },
+    [draggedTaskId, isDropTarget, dropIndex, onTaskPress, handleCardLayout],
+  );
+
+  const showEndIndicator =
+    isDropTarget && dropIndex >= visibleTasks.length;
+
   return (
-    <View style={[styles.column, { width: columnWidth }]}>
+    <View
+      ref={columnRef}
+      style={[
+        styles.column,
+        { width: columnWidth },
+        isDropTarget && styles.columnHighlight,
+      ]}
+      onLayout={handleColumnLayout}
+    >
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{status}</Text>
         <View style={styles.countBadge}>
@@ -32,13 +129,16 @@ export default function KanbanColumn({ status, tasks, columnWidth, onTaskPress, 
       <FlatList
         data={visibleTasks}
         keyExtractor={(t) => t.id}
-        renderItem={({ item }) => (
-          <TaskCard task={item} onPress={() => onTaskPress(item)} />
-        )}
+        renderItem={renderItem}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
+        onLayout={handleListLayout}
+        onScroll={handleListScroll}
+        scrollEventThrottle={16}
+        scrollEnabled={draggedTaskId == null}
         ListFooterComponent={
           <>
+            {showEndIndicator && <View style={styles.dropIndicator} />}
             {hiddenCount > 0 && (
               <Pressable
                 style={styles.loadMoreBtn}
@@ -66,6 +166,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingBottom: 8,
     maxHeight: '100%',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  columnHighlight: {
+    backgroundColor: '#E8F0FE',
+    borderColor: '#4C9AFF',
   },
   header: {
     flexDirection: 'row',
@@ -96,6 +202,13 @@ const styles = StyleSheet.create({
   list: {
     paddingHorizontal: 8,
     paddingBottom: 4,
+  },
+  dropIndicator: {
+    height: 3,
+    backgroundColor: '#0052CC',
+    borderRadius: 2,
+    marginVertical: 2,
+    marginHorizontal: 4,
   },
   loadMoreBtn: {
     padding: 10,
