@@ -32,7 +32,31 @@ export interface SyncStatus {
   pendingOps: number;
 }
 
+export type AuthType = 'pat' | 'oauth';
+
+export interface Account {
+  id: string;
+  name: string;
+  authType: AuthType;
+  // PAT only
+  token?: string;
+  // OAuth only
+  oauthAccessToken?: string;
+  oauthRefreshToken?: string;
+  oauthTokenExpiresAt?: string; // ISO 8601
+  baseId: string;
+  tableName: string;
+}
+
+export interface AccountsState {
+  activeId: string | null;
+  accounts: Account[];
+}
+
 export interface Settings {
+  // OAuth middleman (Lambda URL) is global app settings (not per account).
+  oauth_lambda_url?: string;
+  // Legacy single-account fields (kept temporarily for migration).
   airtable_access_token?: string;
   airtable_base_id?: string;
   airtable_table_name?: string;

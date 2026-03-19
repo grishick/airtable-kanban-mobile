@@ -2,6 +2,7 @@ import * as SQLite from 'expo-sqlite';
 import type { Task, PendingOp, TagOption } from '../types';
 
 let db: SQLite.SQLiteDatabase | null = null;
+let currentDbFile: string | null = null;
 
 function getDb(): SQLite.SQLiteDatabase {
   if (!db) throw new Error('Database not initialized — call initDB() first');
@@ -22,7 +23,13 @@ function randomUUID(): string {
 // ── Init ────────────────────────────────────────────────────────────────────
 
 export async function initDB(): Promise<void> {
-  db = await SQLite.openDatabaseAsync('kanban.db');
+  await initDBForAccountId(undefined);
+}
+
+export async function initDBForAccountId(accountId?: string): Promise<void> {
+  const file = accountId ? `kanban-${accountId}.db` : 'kanban.db';
+  currentDbFile = file;
+  db = await SQLite.openDatabaseAsync(file);
   await db.execAsync('PRAGMA journal_mode = WAL;');
   await db.execAsync('PRAGMA foreign_keys = ON;');
   await migrate();

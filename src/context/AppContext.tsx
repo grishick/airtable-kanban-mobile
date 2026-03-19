@@ -2,20 +2,28 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import { AppState } from 'react-native';
 import * as db from '../lib/db';
 import * as settingsLib from '../lib/settings';
+import * as accountsLib from '../lib/accounts';
 import { SyncEngine } from '../lib/sync';
-import type { Task, SyncStatus, TagOption, Settings } from '../types';
+import type { Account, Settings, Task, SyncStatus, TagOption } from '../types';
+import type { OAuthTokens } from '../lib/oauth';
 
 interface AppContextValue {
   tasks: Task[];
   tagOptions: TagOption[];
   syncStatus: SyncStatus;
   settings: Settings;
+  accounts: Account[];
+  activeAccountId: string | null;
   loading: boolean;
   createTask: (data: Partial<Task>) => Promise<Task>;
   updateTask: (id: string, updates: Partial<Task>) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   triggerSync: () => Promise<void>;
   saveSettings: (s: Settings) => Promise<void>;
+  switchAccount: (id: string) => Promise<void>;
+  addAccount: (data: Omit<Account, 'id'>) => Promise<void>;
+  updateAccount: (id: string, updates: Partial<Omit<Account, 'id'>>) => Promise<void>;
+  deleteAccount: (id: string) => Promise<void>;
   createAirtableTable: () => Promise<void>;
 }
 
@@ -32,25 +40,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     pendingOps: 0,
   });
   const [settings, setSettings] = useState<Settings>({});
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [activeAccountId, setActiveAccountId] = useState<string | null>(null);
 
   const syncRef = useRef<SyncEngine | null>(null);
+  const activeAccountIdRef = useRef<string | null>(null);
 
   // Initialize DB, load data, start sync engine
   useEffect(() => {
     let mounted = true;
 
     async function init() {
-      await db.initDB();
-      const [allTasks, allTags, savedSettings] = await Promise.all([
-        db.getAllTasks(),
-        db.getTagOptions(),
-        settingsLib.loadSettings(),
-      ]);
+      // Accounts (multi-account support) + legacy migration
+      const accountsState = await accountsLib.migrateLegacySettingsToAccounts();
+      const savedSettings = await settingsLib.loadSettings();
+
+      const activeAccount = accountsState.accounts.find((a) => a.id === accountsState.activeId) ?? accountsState.accounts[0] ?? null;
+      const activeId = activeAccount?.id ?? null;
+
+      await db.initDBForAccountId(activeId ?? undefined);
+
+      const [allTasks, allTags] = await Promise.all([db.getAllTasks(), db.getTagOptions()]);
 
       if (!mounted) return;
       setTasks(allTasks);
       setTagOptions(allTags);
       setSettings(savedSettings);
+      setAccounts(accountsState.accounts);
+      setActiveAccountId(activeId);
+      activeAccountIdRef.current = activeId;
 
       const engine = new SyncEngine(
         (status) => { if (mounted) setSyncStatus(status); },
@@ -59,10 +77,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       );
       syncRef.current = engine;
 
+      const token = activeAccount?.authType === 'oauth'
+        ? (activeAccount.oauthAccessToken ?? '')
+        : (activeAccount?.token ?? '');
+      const authType = activeAccount?.authType ?? 'pat';
+
       await engine.reinit({
-        token: savedSettings.airtable_access_token,
-        baseId: savedSettings.airtable_base_id,
-        tableName: savedSettings.airtable_table_name,
+        authType,
+        token,
+        baseId: activeAccount?.baseId ?? '',
+        tableName: activeAccount?.tableName ?? 'Tasks',
+        oauthLambdaUrl: savedSettings.oauth_lambda_url,
+        oauthRefreshToken: activeAccount?.oauthRefreshToken,
+        oauthTokenExpiresAt: activeAccount?.oauthTokenExpiresAt,
+        onOAuthTokensRefreshed: async (tokens: OAuthTokens) => {
+          const accountId = activeAccountIdRef.current;
+          if (!accountId) return;
+          const next = await accountsLib.updateAccount(accountId, {
+            oauthAccessToken: tokens.accessToken,
+            oauthRefreshToken: tokens.refreshToken,
+            oauthTokenExpiresAt: tokens.expiresAt,
+          });
+          setAccounts(next.accounts);
+          setActiveAccountId(next.activeId);
+          activeAccountIdRef.current = next.activeId;
+        },
       });
 
       engine.start();
@@ -139,14 +178,146 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     await syncRef.current?.sync();
   };
 
+  const reinitForActiveAccount = async (accountId: string): Promise<void> => {
+    const account = accounts.find((a) => a.id === accountId) ?? null;
+
+    await db.initDBForAccountId(accountId);
+    setTasks(await db.getAllTasks());
+    setTagOptions(await db.getTagOptions());
+
+    if (!syncRef.current) return;
+    if (!account) {
+      await syncRef.current.reinit({ token: '', baseId: '', tableName: 'Tasks' });
+      return;
+    }
+
+    const token = account.authType === 'oauth'
+      ? (account.oauthAccessToken ?? '')
+      : (account.token ?? '');
+
+    await syncRef.current.reinit({
+      token,
+      baseId: account.baseId,
+      tableName: account.tableName,
+    });
+    void syncRef.current.sync();
+  };
+
+  const switchAccount = async (id: string): Promise<void> => {
+    const next = await accountsLib.setActiveAccount(id);
+    setAccounts(next.accounts);
+    setActiveAccountId(next.activeId);
+    activeAccountIdRef.current = next.activeId;
+
+    // Use next state to avoid stale closure.
+    const account = next.accounts.find((a) => a.id === id) ?? null;
+    await db.initDBForAccountId(id);
+    setTasks(await db.getAllTasks());
+    setTagOptions(await db.getTagOptions());
+
+    if (syncRef.current) {
+      const token = account?.authType === 'oauth' ? (account.oauthAccessToken ?? '') : (account?.token ?? '');
+      const authType = account?.authType ?? 'pat';
+      await syncRef.current.reinit({
+        authType,
+        token,
+        baseId: account?.baseId ?? '',
+        tableName: account?.tableName ?? 'Tasks',
+        oauthLambdaUrl: settings.oauth_lambda_url,
+        oauthRefreshToken: account?.oauthRefreshToken,
+        oauthTokenExpiresAt: account?.oauthTokenExpiresAt,
+        onOAuthTokensRefreshed: async (tokens: OAuthTokens) => {
+          const accountId = activeAccountIdRef.current;
+          if (!accountId) return;
+          const updated = await accountsLib.updateAccount(accountId, {
+            oauthAccessToken: tokens.accessToken,
+            oauthRefreshToken: tokens.refreshToken,
+            oauthTokenExpiresAt: tokens.expiresAt,
+          });
+          setAccounts(updated.accounts);
+          setActiveAccountId(updated.activeId);
+          activeAccountIdRef.current = updated.activeId;
+        },
+      });
+      void syncRef.current.sync();
+    }
+  };
+
+  const addAccountFn = async (data: Omit<Account, 'id'>): Promise<void> => {
+    const next = await accountsLib.addAccount(data);
+    setAccounts(next.accounts);
+    setActiveAccountId(next.activeId);
+
+    if (next.activeId && next.activeId !== activeAccountId) {
+      await switchAccount(next.activeId);
+    }
+  };
+
+  const updateAccountFn = async (id: string, updates: Partial<Omit<Account, 'id'>>): Promise<void> => {
+    const next = await accountsLib.updateAccount(id, updates);
+    setAccounts(next.accounts);
+    setActiveAccountId(next.activeId);
+
+    if (id === activeAccountId && activeAccountId) {
+      await switchAccount(activeAccountId);
+    }
+  };
+
+  const deleteAccountFn = async (id: string): Promise<void> => {
+    const next = await accountsLib.deleteAccount(id);
+    setAccounts(next.accounts);
+    setActiveAccountId(next.activeId);
+
+    if (id === activeAccountId) {
+      if (next.activeId) {
+        await switchAccount(next.activeId);
+      } else {
+        await db.initDBForAccountId(undefined);
+        setTasks([]);
+        setTagOptions([]);
+        activeAccountIdRef.current = null;
+        await syncRef.current?.reinit({
+          authType: 'pat',
+          token: '',
+          baseId: '',
+          tableName: 'Tasks',
+          oauthLambdaUrl: settings.oauth_lambda_url,
+        });
+      }
+    }
+  };
+
   const saveSettingsFn = async (s: Settings): Promise<void> => {
     await settingsLib.saveSettings(s);
     const updated = { ...settings, ...s };
     setSettings(updated);
+
+    const activeAccount = accounts.find((a) => a.id === activeAccountId) ?? null;
+    const token = activeAccount?.authType === 'oauth'
+      ? (activeAccount.oauthAccessToken ?? '')
+      : (activeAccount?.token ?? '');
+    const authType = activeAccount?.authType ?? 'pat';
+
     await syncRef.current?.reinit({
-      token: updated.airtable_access_token,
-      baseId: updated.airtable_base_id,
-      tableName: updated.airtable_table_name,
+      authType,
+      token,
+      baseId: activeAccount?.baseId ?? '',
+      tableName: activeAccount?.tableName ?? 'Tasks',
+      oauthLambdaUrl: updated.oauth_lambda_url,
+      oauthRefreshToken: activeAccount?.oauthRefreshToken,
+      oauthTokenExpiresAt: activeAccount?.oauthTokenExpiresAt,
+      onOAuthTokensRefreshed: async (tokens: OAuthTokens) => {
+        const accountId = activeAccountIdRef.current;
+        if (!accountId) return;
+        const next = await accountsLib.updateAccount(accountId, {
+          oauthAccessToken: tokens.accessToken,
+          oauthRefreshToken: tokens.refreshToken,
+          oauthTokenExpiresAt: tokens.expiresAt,
+        });
+        setAccounts(next.accounts);
+        setActiveAccountId(next.activeId);
+        activeAccountIdRef.current = next.activeId;
+      },
     });
   };
 
@@ -161,12 +332,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         tagOptions,
         syncStatus,
         settings,
+        accounts,
+        activeAccountId,
         loading,
         createTask,
         updateTask,
         deleteTask,
         triggerSync,
         saveSettings: saveSettingsFn,
+        switchAccount,
+        addAccount: addAccountFn,
+        updateAccount: updateAccountFn,
+        deleteAccount: deleteAccountFn,
         createAirtableTable,
       }}
     >

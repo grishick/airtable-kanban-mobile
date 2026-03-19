@@ -1,6 +1,8 @@
 import * as db from './db';
 import { AirtableClient, AirtableFields, AirtableRecord } from './airtable';
-import type { SyncStatus, Task, TagOption, PendingOp } from '../types';
+import type { AuthType, SyncStatus, Task, TagOption, PendingOp } from '../types';
+import type { OAuthTokens } from './oauth';
+import { refreshOAuthToken } from './oauth';
 
 const SYNC_INTERVAL_MS = 30_000;
 const MAX_RETRIES = 5;
@@ -12,6 +14,14 @@ export class SyncEngine {
   private lastError: string | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private initTimer: ReturnType<typeof setTimeout> | null = null;
+  private authType: AuthType = 'pat';
+  private baseId = '';
+  private tableName = 'Tasks';
+
+  private oauthLambdaUrl: string | null = null;
+  private oauthRefreshToken: string | null = null;
+  private oauthTokenExpiresAt: string | null = null;
+  private onOAuthTokensRefreshed: ((tokens: OAuthTokens) => Promise<void>) | null = null;
 
   constructor(
     private onStatusChange: (status: SyncStatus) => void,
@@ -20,11 +30,42 @@ export class SyncEngine {
   ) {}
 
   async reinit(settings: {
+    authType?: AuthType;
     token?: string;
     baseId?: string;
     tableName?: string;
+    oauthLambdaUrl?: string;
+    oauthRefreshToken?: string;
+    oauthTokenExpiresAt?: string;
+    onOAuthTokensRefreshed?: ((tokens: OAuthTokens) => Promise<void>) | null;
   }): Promise<void> {
-    const { token = '', baseId = '', tableName = 'Tasks' } = settings;
+    const {
+      authType = 'pat',
+      token = '',
+      baseId = '',
+      tableName = 'Tasks',
+      oauthLambdaUrl,
+      oauthRefreshToken,
+      oauthTokenExpiresAt,
+      onOAuthTokensRefreshed,
+    } = settings;
+
+    this.authType = authType;
+    this.baseId = baseId;
+    this.tableName = tableName;
+
+    if (authType === 'oauth') {
+      this.oauthLambdaUrl = oauthLambdaUrl ?? null;
+      this.oauthRefreshToken = oauthRefreshToken ?? null;
+      this.oauthTokenExpiresAt = oauthTokenExpiresAt ?? null;
+      this.onOAuthTokensRefreshed = onOAuthTokensRefreshed ?? null;
+    } else {
+      this.oauthLambdaUrl = null;
+      this.oauthRefreshToken = null;
+      this.oauthTokenExpiresAt = null;
+      this.onOAuthTokensRefreshed = null;
+    }
+
     if (token && baseId) {
       this.client = new AirtableClient(token, baseId, tableName);
       if (this.state === 'unconfigured') this.state = 'idle';
@@ -32,6 +73,7 @@ export class SyncEngine {
       this.client = null;
       this.state = 'unconfigured';
     }
+
     await this.broadcastStatus();
   }
 
@@ -87,6 +129,7 @@ export class SyncEngine {
   }
 
   async sync(): Promise<void> {
+    await this.refreshOAuthTokenIfNeeded();
     if (!this.client) {
       this.state = 'unconfigured';
       await this.broadcastStatus();
@@ -206,6 +249,35 @@ export class SyncEngine {
         const position = (await db.getMaxPosition(fields.status ?? 'Not Started')) + 1000;
         await db.createTask({ ...fields, position, airtable_id: record.id });
       }
+    }
+  }
+
+  private async refreshOAuthTokenIfNeeded(): Promise<void> {
+    if (this.authType !== 'oauth') return;
+    if (!this.oauthLambdaUrl || !this.oauthRefreshToken) return;
+    if (!this.baseId) return;
+
+    const expiry = this.oauthTokenExpiresAt
+      ? new Date(this.oauthTokenExpiresAt).getTime()
+      : NaN;
+
+    // Refresh when expired, close to expiry, or we currently have no Airtable client.
+    const needsRefresh =
+      isNaN(expiry) || expiry - Date.now() < 5 * 60 * 1000 || !this.client;
+
+    if (!needsRefresh) return;
+
+    try {
+      const tokens = await refreshOAuthToken(this.oauthLambdaUrl, this.oauthRefreshToken);
+      this.oauthRefreshToken = tokens.refreshToken;
+      this.oauthTokenExpiresAt = tokens.expiresAt;
+      this.client = new AirtableClient(tokens.accessToken, this.baseId, this.tableName);
+      await this.onOAuthTokensRefreshed?.(tokens);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.client = null;
+      this.state = 'unconfigured';
+      this.lastError = msg;
     }
   }
 }

@@ -41,6 +41,31 @@ function timeoutSignal(ms: number): AbortSignal {
   return controller.signal;
 }
 
+export async function fetchBases(
+  token: string,
+): Promise<Array<{ id: string; name: string }>> {
+  const resp = await fetch('https://api.airtable.com/v0/meta/bases', {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: timeoutSignal(5000),
+  });
+  if (!resp.ok) throw new Error(`listBases failed: ${resp.status}`);
+  const data = (await resp.json()) as { bases?: Array<{ id: string; name: string }> };
+  return data.bases ?? [];
+}
+
+export async function fetchTables(
+  token: string,
+  baseId: string,
+): Promise<Array<{ name: string }>> {
+  const resp = await fetch(`https://api.airtable.com/v0/meta/bases/${baseId}/tables`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: timeoutSignal(5000),
+  });
+  if (!resp.ok) throw new Error(`listTables failed: ${resp.status}`);
+  const data = (await resp.json()) as { tables?: Array<{ name: string }> };
+  return (data.tables ?? []).map((t) => ({ name: t.name }));
+}
+
 export class AirtableClient {
   private readonly baseUrl = 'https://api.airtable.com/v0';
 
