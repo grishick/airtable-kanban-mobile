@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -12,7 +13,7 @@ import {
 } from 'react-native';
 import { useApp } from '../context/AppContext';
 import type { Account, AuthType } from '../types';
-import { fetchBases, fetchTables } from '../lib/airtable';
+import { fetchBaseName, fetchBases, fetchTables } from '../lib/airtable';
 import { OAuthTokens, startOAuthFlow } from '../lib/oauth';
 
 type EditMode = 'none' | 'add' | string; // string = account id being edited
@@ -136,6 +137,7 @@ export default function SettingsScreen() {
         if (loadedBases.length > 0) {
           const firstBase = loadedBases[0];
           setFormBaseId(firstBase.id);
+          if (!formName.trim()) setFormName(firstBase.name);
           await handleLoadTablesForBase(tokens.accessToken, firstBase.id);
         } else {
           setBasesError('Could not load bases — enter ID manually');
@@ -205,9 +207,21 @@ export default function SettingsScreen() {
     setStatusMsg(null);
 
     try {
-      const name = formName.trim() || defaultNameForForm(formBaseId);
       const baseId = formBaseId.trim();
       const tableName = formTableName.trim() || 'Tasks';
+
+      let name = formName.trim();
+      if (!name) {
+        const token = (editMode === 'add' && addAuthTab === 'oauth')
+          ? oauthTokens?.accessToken
+          : formToken.trim();
+        if (token && baseId) {
+          const baseName = await fetchBaseName(token, baseId);
+          name = baseName ?? 'New Account';
+        } else {
+          name = 'New Account';
+        }
+      }
 
       if (editMode === 'add') {
         if (addAuthTab === 'oauth') {
@@ -268,11 +282,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const defaultNameForForm = (baseId: string): string => {
-    if (baseId) return `Account (${baseId.slice(0, 10)}…)`;
-    return 'Airtable Account';
-  };
-
   const handleSaveAppSettings = async () => {
     try {
       await saveSettings({ oauth_lambda_url: oauthLambdaUrl.trim() || undefined });
@@ -314,7 +323,21 @@ export default function SettingsScreen() {
 
         {/* Accounts list */}
         {accounts.length === 0 && editMode === 'none' && (
-          <Text style={styles.emptyText}>No accounts yet. Add one to connect to Airtable.</Text>
+          <View style={styles.card}>
+            <Text style={styles.emptyText}>No accounts yet. Add one to connect to Airtable.</Text>
+            <Pressable style={styles.btnPrimary} onPress={startAdd}>
+              <Text style={styles.btnPrimaryText}>Add Account</Text>
+            </Pressable>
+            <Pressable
+              style={styles.signupLink}
+              onPress={() => void Linking.openURL('https://airtable.com/invite/r/V373PiX4')}
+            >
+              <Text style={styles.signupText}>
+                Don't have an Airtable account?{' '}
+                <Text style={styles.signupLinkText}>Sign up for free</Text>
+              </Text>
+            </Pressable>
+          </View>
         )}
 
         {accounts.length > 0 && editMode === 'none' && (
@@ -356,20 +379,31 @@ export default function SettingsScreen() {
             <Text style={styles.cardTitle}>{editMode === 'add' ? 'Add Account' : 'Edit Account'}</Text>
 
             {editMode === 'add' && (
-              <View style={styles.toggleRow}>
+              <>
+                <View style={styles.toggleRow}>
+                  <Pressable
+                    style={[styles.toggleBtn, addAuthTab === 'pat' && styles.toggleBtnActive]}
+                    onPress={() => setAddAuthTab('pat')}
+                  >
+                    <Text style={styles.toggleBtnText}>Personal Access Token</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.toggleBtn, addAuthTab === 'oauth' && styles.toggleBtnActive]}
+                    onPress={() => setAddAuthTab('oauth')}
+                  >
+                    <Text style={styles.toggleBtnText}>Sign in with Airtable</Text>
+                  </Pressable>
+                </View>
                 <Pressable
-                  style={[styles.toggleBtn, addAuthTab === 'pat' && styles.toggleBtnActive]}
-                  onPress={() => setAddAuthTab('pat')}
+                  style={styles.signupLink}
+                  onPress={() => void Linking.openURL('https://airtable.com/invite/r/V373PiX4')}
                 >
-                  <Text style={styles.toggleBtnText}>Personal Access Token</Text>
+                  <Text style={styles.signupText}>
+                    Don't have an Airtable account?{' '}
+                    <Text style={styles.signupLinkText}>Sign up for free</Text>
+                  </Text>
                 </Pressable>
-                <Pressable
-                  style={[styles.toggleBtn, addAuthTab === 'oauth' && styles.toggleBtnActive]}
-                  onPress={() => setAddAuthTab('oauth')}
-                >
-                  <Text style={styles.toggleBtnText}>Sign in with Airtable</Text>
-                </Pressable>
-              </View>
+              </>
             )}
 
             <View style={styles.group}>
@@ -455,6 +489,9 @@ export default function SettingsScreen() {
                         ]}
                         onPress={() => {
                           setFormBaseId(b.id);
+                          if (!formName.trim() || bases.some(base => base.name === formName)) {
+                            setFormName(b.name);
+                          }
                           void handleLoadTablesForBase(oauthTokens.accessToken, b.id);
                         }}
                       >
@@ -585,7 +622,7 @@ export default function SettingsScreen() {
         </Pressable>
 
         <View style={styles.footer}>
-          <Text style={styles.versionText}>Airtable Kanban v1.0.3</Text>
+          <Text style={styles.versionText}>Airtable Kanban v1.0.4</Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -614,6 +651,18 @@ const styles = StyleSheet.create({
     color: '#6B778C',
     marginTop: 8,
     marginBottom: 14,
+  },
+  signupLink: {
+    marginTop: 10,
+    alignItems: 'center',
+  },
+  signupText: {
+    fontSize: 13,
+    color: '#6B778C',
+  },
+  signupLinkText: {
+    color: '#0052CC',
+    fontWeight: '600',
   },
   card: {
     borderWidth: 1,

@@ -53,6 +53,15 @@ export async function fetchBases(
   return data.bases ?? [];
 }
 
+export async function fetchBaseName(token: string, baseId: string): Promise<string | null> {
+  try {
+    const bases = await fetchBases(token);
+    return bases.find(b => b.id === baseId)?.name ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchTables(
   token: string,
   baseId: string,
