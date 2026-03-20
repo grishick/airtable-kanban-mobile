@@ -622,7 +622,7 @@ export default function SettingsScreen() {
         </Pressable>
 
         <View style={styles.footer}>
-          <Text style={styles.versionText}>Airtable Kanban v1.0.4</Text>
+          <Text style={styles.versionText}>Airtable Kanban v1.0.5</Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
