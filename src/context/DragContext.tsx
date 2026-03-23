@@ -171,14 +171,16 @@ export function DragProvider({
       const fingerInList = fingerY - listScreenY + scrollOffset;
 
       const cards = cardLayoutsRef.current[foundStatus] ?? [];
+      let cumY = 0;
       let idx = cards.length;
       for (let i = 0; i < cards.length; i++) {
         const card = cards[i];
         if (!card) continue;
-        if (fingerInList < card.y + card.height / 2) {
+        if (fingerInList < cumY + card.height / 2) {
           idx = i;
           break;
         }
+        cumY += card.height;
       }
 
       if (
@@ -237,11 +239,13 @@ export function DragProvider({
 
       setDraggedTask(task);
       setTargetStatus(task.status);
-      setDropIndex(0);
       targetStatusRef.current = task.status;
       dropIndexRef.current = 0;
+      setDropIndex(0);
+
+      findDropTarget(fingerX, fingerY);
     },
-    [floatX, floatY, floatVisible],
+    [floatX, floatY, floatVisible, findDropTarget],
   );
 
   const updateDrag = useCallback(
